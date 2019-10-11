@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split 
-from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+from category_encoders import TargetEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
@@ -16,6 +16,10 @@ model_frame = pd.read_csv('withlabels.csv')
 
 # fill NaN values in categorical fields with not_given
 for column in model_frame.select_dtypes(include=['object']):
+  # we want to mark categorical values as not_given (missing, non_present, whatever preferred term)
+  # as there may be a connection between values not being given and other target variables (in our case, Income)
+  # people from country X may be more reticent to share salary, height, whatever.
+  # best not to ffill 
   model_frame[column] = model_frame[column].fillna('not_given')
 
 for column in model_frame.select_dtypes(exclude=['object']).drop('Instance', axis=1):
@@ -24,11 +28,6 @@ for column in model_frame.select_dtypes(exclude=['object']).drop('Instance', axi
   upper = np.percentile(model_frame[column].dropna(),90)
   mean = model_frame[model_frame[column].between(lower,upper)][column].values.mean()
   model_frame[column] = model_frame[column].fillna(mean)
-
-  # remove outliers
-  #if(column == 'Income in EUR'):
-   # data_frame = data_frame[data_frame[column] > lower]
-    #data_frame = data_frame[data_frame[column] < upper]
 
 # import scipy.stats as stats
 # this code was used to find correlation between columns and Income, to refine which columns used
@@ -47,60 +46,54 @@ for tuple in correlations:
   print("\n")
 """
 
-# these were the resulting low correlation columns
+# these were the resulting low correlation columns, drop them
 low_correlation = ['Hair Color', 'Wears Glasses', 'Size of City']
 model_frame = model_frame.drop(columns=low_correlation)
 
-
-income = model_frame[['Income in EUR']]
 columns = []
-for column in model_frame.columns:
-  if(column != 'Instance' and column != 'Income in EUR'):
-    columns.append(column)
-parameters = model_frame[columns]
+for column in model_frame.drop('Income in EUR').columns:
+  columns.append(column)
 
-# build transformers 
-
-# numeric transformation is done at the start so imputing would seem to be redundant
-# but it performs better this way. perhaps it overwrites my changes and simply deals with 
-# n/a values better.
-numeric_transformer = Pipeline(steps=[('imputer', SimpleImputer(strategy='median')),
-                                      ('scaler', StandardScaler())])
-
-# again, imputing seems redundant, but improves performance
-categorical_transformer = Pipeline(steps=[('imputer', SimpleImputer(strategy='constant', fill_value='not_present')),
-                                                                    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+# get our X and Y
+dependent_var = model_frame['Income in EUR'].values
+independent_vars = model_frame[columns]
 
 # get features we will transform
+# hard-coded but there aren't too many columns and no need to build
+# something complicated if the scope does not require it
 numeric_features = ['Year of Record','Age','Body Height [cm]']
 categorical_features = ['Country','Gender','Profession']
 
-# looking into whether encoding some typical high paying job keywords might help
-"""
-professions = ['senior','lead','consultant','manager','analyst','coordinator']
-for profession in professions:
-  data_frame[profession] = np.where(data_frame['Profession'].str.contains(profession),1,0)
-data_frame = data_frame.drop(columns='Profession')
-"""
+# build GridSearchCV object
+# using random forest regressor
+# increasing n_estimators can improve score but increases computation time
+# ditto for max_depth
+# n_jobs to use all available CPU
+# cross validate 5 times - seems to be accepted as 
+gcsv = GridSearchCV(estimator = RandomForestRegressor(random_state=15000),
+                    param_grid = { 'n_estimators': (25, 100, 250), 'max_depth': (10, 15, 20) }, 
+                    n_jobs = -1, cv = 5, verbose=1, scoring='neg_mean_squared_error')
 
-# transform columns and build regression model
-preprocessor = ColumnTransformer(transformers=[('num', numeric_transformer, numeric_features),
-                                               ('cat', categorical_transformer, categorical_features)])
 
-gcsv = GridSearchCV(estimator = RandomForestRegressor(random_state=1330), param_grid = { 'n_estimators': [10, 30, 50],
-                                                                        'max_depth': [10, 30, 50],
-                                                                        'min_samples_split': [0.01, 0.05, 0.1, 0.5, 1],
-                                                                      }, 
-                                                        n_jobs = -1, cv = 5, verbose=1)
-regr = Pipeline(steps=[('preprocessor', preprocessor),('regressor', gcsv)])
+# build pipeline
+# impute using column transformers (passed directly rather than assigning to two diff objects - as done previously - to allow
+# us to build only one pipeline and not two.
 
-# get training and test values
-X_train, X_test, Y_train, Y_test = train_test_split(parameters, income, train_size = 0.8, test_size = 0.2)
+# again, I have already filled missing data at start of file but SimpleImputer seems to improve it so whether it is tacking on
+# to my work or overwriting it is unknown
+regr = Pipeline(steps=[('Imputer', (ColumnTransformer(transformers=[('num', SimpleImputer(strategy='median'), numeric_features),
+                                               ('cat', SimpleImputer(strategy='most_frequent', fill_value='not_present'), categorical_features)]))),
+                      # cols are hard-coded again
+                       ('enc', TargetEncoder(cols=[3,4,5])),
+                       ('grid', gcsv)])
 
-regr.fit(X_train, Y_train.values.ravel())
+# get training and test values and fit data
+X_train, X_test, Y_train, Y_test = train_test_split(independent_vars, dependent_var, train_size = 0.8, test_size = 0.2)
+
+regr.fit(X_train, Y_train)
 
 # build data frame for our target dataset
-target_frame = pd.read_csv('nolabels.csv').drop(columns=low_correlation)
+target_frame = pd.read_csv('nolabels.csv').drop(columns=low_correlation).fillna(method='ffill')
 
 y_predict = regr.predict(target_frame[columns])
 print(np.sqrt(metrics.mean_squared_error(Y_test, regr.predict(X_test))))
@@ -113,4 +106,4 @@ f = open("predictions.csv", "w")
 f.write("Instance,Income\n")
 
 for i in range(len(y_predict)):
-  f.write(str(instances[i]) + "," + str(y_predict[i][0]) + "\n")
+  f.write(str(instances[i]) + "," + str(y_predict[i]) + "\n")
