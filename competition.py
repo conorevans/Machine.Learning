@@ -51,8 +51,9 @@ low_correlation = ['Hair Color', 'Wears Glasses', 'Size of City']
 model_frame = model_frame.drop(columns=low_correlation)
 
 columns = []
-for column in model_frame.drop('Income in EUR').columns:
-  columns.append(column)
+for column in model_frame.columns:
+  if(column != 'Income in EUR'):
+    columns.append(column)
 
 # get our X and Y
 dependent_var = model_frame['Income in EUR'].values
