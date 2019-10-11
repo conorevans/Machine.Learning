@@ -8,6 +8,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import GridSearchCV
 
 # load data frame for data from which we will build our model
 model_frame = pd.read_csv('withlabels.csv')
@@ -84,12 +86,18 @@ data_frame = data_frame.drop(columns='Profession')
 # transform columns and build regression model
 preprocessor = ColumnTransformer(transformers=[('num', numeric_transformer, numeric_features),
                                                ('cat', categorical_transformer, categorical_features)])
-regr = Pipeline(steps=[('preprocessor', preprocessor),('regressor', LinearRegression())])
+
+gcsv = GridSearchCV(estimator = RandomForestRegressor(random_state=1330), param_grid = { 'n_estimators': [10, 30, 50],
+                                                                        'max_depth': [10, 30, 50],
+                                                                        'min_samples_split': [0.01, 0.05, 0.1, 0.5, 1],
+                                                                      }, 
+                                                        n_jobs = -1, cv = 5, verbose=1)
+regr = Pipeline(steps=[('preprocessor', preprocessor),('regressor', gcsv)])
 
 # get training and test values
 X_train, X_test, Y_train, Y_test = train_test_split(parameters, income, train_size = 0.8, test_size = 0.2)
 
-regr.fit(X_train, Y_train)
+regr.fit(X_train, Y_train.values.ravel())
 
 # build data frame for our target dataset
 target_frame = pd.read_csv('nolabels.csv').drop(columns=low_correlation)
