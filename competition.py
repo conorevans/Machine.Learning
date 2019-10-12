@@ -72,7 +72,7 @@ categorical_features = ['Country','Gender','Profession']
 # n_jobs to use all available CPU
 # cross validate 5 times - seems to be accepted as 
 gcsv = GridSearchCV(estimator = RandomForestRegressor(random_state=15000),
-                    param_grid = { 'n_estimators': (25, 100, 250), 'max_depth': (10, 15, 20) }, 
+                    param_grid = { 'n_estimators': (100, 200, 300), 'max_depth': (10, 20, 30) }, 
                     n_jobs = -1, cv = 5, verbose=1, scoring='neg_mean_squared_error')
 
 
