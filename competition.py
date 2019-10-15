@@ -2,10 +2,8 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn import metrics
-from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
 from category_encoders import TargetEncoder
 from sklearn.compose import ColumnTransformer
 from catboost import CatBoostRegressor
@@ -22,7 +20,7 @@ for column in model_frame.select_dtypes(include=['object']):
   model_frame[column] = model_frame[column].fillna('not_given')
 
 for column in model_frame.select_dtypes(exclude=['object']).drop('Instance', axis=1):
-  # cut bottom and top 10 percent of data to have a more balanced mean
+  # cut bottom and top 10 percent of data to have a more balanced mean used to fill N/A values
   lower = np.percentile(model_frame[column].dropna(),10)
   upper = np.percentile(model_frame[column].dropna(),90)
   mean = model_frame[model_frame[column].between(lower,upper)][column].values.mean()
@@ -69,7 +67,8 @@ categorical_features = ['Country','Gender','Profession']
 # increasing n_estimators can improve score but increases computation time
 # ditto for max_depth, though capped at 16 for CBRegressor
 # n_jobs to use all available CPU
-# cross validate 5 times - seems to be accepted as common standard
+# cross validate 5 times - seems to be accepted as common standard,
+# I tried higher but it seemed to overfit
 gcsv = GridSearchCV(estimator = CatBoostRegressor(random_state=15000),
                     param_grid = { 'n_estimators': (100, 200, 250), 'max_depth': (8, 12, 16) }, 
                     n_jobs = -1, cv = 5, verbose=1, scoring='neg_mean_squared_error')
@@ -95,14 +94,15 @@ regr.fit(X_train, Y_train)
 # build data frame for our target dataset
 target_frame = pd.read_csv('nolabels.csv').drop(columns=low_correlation).fillna(method='ffill')
 
+# get predict values and print out RMSE
 y_predict = regr.predict(target_frame[columns])
 print(np.sqrt(metrics.mean_squared_error(Y_test, regr.predict(X_test))))
-
-# Write to File
 
 # Instances saved to separate file for ease of access
 instances = pd.read_csv('instances.csv')['Instance'].values
 f = open("predictions.csv", "w")
+
+# Write to File
 f.write("Instance,Income\n")
 
 for i in range(len(y_predict)):
