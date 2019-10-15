@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn import metrics
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
@@ -8,9 +8,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from category_encoders import TargetEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import GridSearchCV
-from xgboost import XGBRegressor
+from catboost import CatBoostRegressor
 
 # load data frame for data from which we will build our model
 model_frame = pd.read_csv('withlabels.csv')
@@ -67,14 +65,14 @@ numeric_features = ['Year of Record','Age','Body Height [cm]']
 categorical_features = ['Country','Gender','Profession']
 
 # build GridSearchCV object
-# using random forest regressor
+# using cat boost regressors
 # increasing n_estimators can improve score but increases computation time
-# ditto for max_depth
+# ditto for max_depth, though capped at 16 for CBRegressor
 # n_jobs to use all available CPU
-# cross validate 5 times - seems to be accepted as 
-gcsv = GridSearchCV(estimator = XGBRegressor(random_state=15000),
-                    param_grid = { 'n_estimators': (100, 200, 250), 'max_depth': (8, 14, 20) }, 
-                    n_jobs = -1, cv = 5, verbose=10, scoring='neg_mean_squared_error')
+# cross validate 5 times - seems to be accepted as common standard
+gcsv = GridSearchCV(estimator = CatBoostRegressor(random_state=15000),
+                    param_grid = { 'n_estimators': (100, 200, 250), 'max_depth': (8, 12, 16) }, 
+                    n_jobs = -1, cv = 5, verbose=1, scoring='neg_mean_squared_error')
 
 
 # build pipeline
