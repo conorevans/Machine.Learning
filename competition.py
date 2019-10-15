@@ -10,6 +10,7 @@ from category_encoders import TargetEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
+from xgboost import XGBRegressor
 
 # load data frame for data from which we will build our model
 model_frame = pd.read_csv('withlabels.csv')
@@ -71,9 +72,9 @@ categorical_features = ['Country','Gender','Profession']
 # ditto for max_depth
 # n_jobs to use all available CPU
 # cross validate 5 times - seems to be accepted as 
-gcsv = GridSearchCV(estimator = RandomForestRegressor(random_state=15000),
-                    param_grid = { 'n_estimators': (100, 200, 300), 'max_depth': (10, 20, 30) }, 
-                    n_jobs = -1, cv = 5, verbose=1, scoring='neg_mean_squared_error')
+gcsv = GridSearchCV(estimator = XGBRegressor(random_state=15000),
+                    param_grid = { 'n_estimators': (100, 200, 250), 'max_depth': (8, 14, 20) }, 
+                    n_jobs = -1, cv = 5, verbose=10, scoring='neg_mean_squared_error')
 
 
 # build pipeline
